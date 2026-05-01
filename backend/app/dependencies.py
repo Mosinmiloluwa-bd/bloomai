@@ -25,15 +25,18 @@ def get_current_user(authorization: Annotated[str | None, Header(alias="Authoriz
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SUPABASE_JWT_SECRET is missing.")
 
     try:
-        claims = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
-        )
-    except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Supabase JWT has expired.") from exc
+        # Decode without signature verification just to extract claims (e.g., role)
+        claims = jwt.decode(token, options={"verify_signature": False})
     except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Malformed JWT.") from exc
+
+    try:
+        from backend.db.supabase_client import get_supabase_admin_client
+        client = get_supabase_admin_client()
+        user_resp = client.auth.get_user(token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked Supabase JWT.")
+    except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Supabase JWT.") from exc
 
     user_id = claims.get("sub")
