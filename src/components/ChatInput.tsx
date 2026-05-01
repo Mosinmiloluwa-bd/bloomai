@@ -18,7 +18,13 @@ export function ChatInput({ onSend, onOpenThoughtRecord, disabled, crisisLock }:
     // Clear input immediately so the user gets instant feedback
     setValue('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    await onSend(trimmed);
+    
+    const success = await onSend(trimmed);
+    if (!success) {
+      // If sending failed (e.g. crisis lock or error), restore the text
+      setValue(trimmed);
+      setTimeout(handleInput, 0); // Restore height
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
