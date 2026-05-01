@@ -101,9 +101,10 @@ async def process_chat(user_id: str, message: str, session_id: str | None = None
                 result = RouteResult(response=safety.response, route="legacy_fallback_safety", safety_triggered=True)
             else:
                 result = RouteResult(response=legacy, route="legacy_fallback")
-        except StackAIFallbackError:
+        except StackAIFallbackError as fallback_exc:
+            logger.error("StackAI fallback also failed: %s", fallback_exc)
             result = RouteResult(
-                response="I'm sorry, I'm having trouble responding right now. Please try again in a moment, and if this is urgent, contact a trusted person or emergency services.",
+                response="Something went wrong on my end — really sorry about that. Can you try sending your message again?",
                 route="canned_fallback",
             )
 

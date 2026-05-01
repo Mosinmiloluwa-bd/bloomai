@@ -38,31 +38,43 @@ SAFE_OVERRIDE = (
     "+2349028080416. You matter, and you don't have to carry this alone."
 )
 
-# Individual signal patterns — these only fire for clearly generic AI refusals.
-# They are deliberately tight so Bloom's own warm responses are never caught.
-_REFUSAL_SIGNALS = [
-    r"I'?m sorry for any inconvenience",
-    r"I'?m (currently )?unable to provide (the )?support you need",
-    r"I (am an AI|cannot|can not) (and |that )?(provide|offer) (the )?support you need",
-    r"reach out to a trusted person in your life",
-    r"contacting? a mental health professional for additional support",
+# Hard patterns — single match is conclusive.
+_HARD_REFUSAL_PATTERNS = [
+    r"I'?m sorry for any inconvenience.{0,80}(unable|can.?t)",
+    r"I am an AI and (cannot|can.?t) provide (the )?support",
+    r"I'?m (currently )?unable to (respond|provide support) as I (usually|normally) would",
 ]
 
-_HARD_REFUSAL_PATTERNS = [
-    r"I'?m sorry for any inconvenience.{0,60}unable to provide",
-    r"I am an AI and cannot provide (the )?support you need",
+# Redirect phrases — one of these plus structural checks = refusal.
+_REDIRECT_SIGNALS = [
+    r"reach out to (a trusted person|emergency services|a professional)",
+    r"contact(ing)? a mental health professional",
+    r"find(ing)? a supportive (community|person)",
+    r"try engaging in an activity",
+    r"I'?ll be back online",
+    r"technical difficulties",
+    r"unable to respond as I",
+    r"I'?m here for you,? but I'?m unable",
 ]
 
 
 def _is_provider_refusal(text: str) -> bool:
-    """Return True if the text looks like a canned provider-level refusal."""
-    # Any single hard-match is conclusive
+    """Return True if the text looks like a canned provider-level refusal.
+
+    Strategy: hard pattern OR (structurally long + no question + redirect phrase).
+    This is model-agnostic — it catches novel phrasings by shape, not exact words.
+    """
     if _matches(_HARD_REFUSAL_PATTERNS, text):
         return True
-    # Three or more weak signals together indicate a refusal
-    # (threshold raised to 3 so Bloom's own warm sign-offs are never caught)
-    hits = sum(1 for p in _REFUSAL_SIGNALS if re.search(p, text, flags=re.IGNORECASE | re.DOTALL))
-    return hits >= 3
+
+    # Structural check: refusals are long walls of text, don't end with '?',
+    # and always redirect the user elsewhere.
+    stripped = text.strip()
+    word_count = len(stripped.split())
+    ends_with_question = stripped.endswith("?")
+    has_redirect = any(re.search(p, stripped, flags=re.IGNORECASE | re.DOTALL) for p in _REDIRECT_SIGNALS)
+
+    return word_count > 40 and not ends_with_question and has_redirect
 
 
 @dataclass(slots=True)
