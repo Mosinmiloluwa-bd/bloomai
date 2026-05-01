@@ -31,6 +31,12 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/ping")
+async def ping() -> dict[str, str]:
+    """Keep-alive endpoint. Point UptimeRobot here every 5 minutes to prevent cold starts."""
+    return {"status": "ok"}
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     response = await call_next(request)

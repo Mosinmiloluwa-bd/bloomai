@@ -8,7 +8,7 @@ from backend.app.config import settings
 from backend.services.llm import generate_response
 from backend.services.memory import get_history, save_message
 from backend.services.rag import retrieve_relevant_documents
-from backend.services.safety import check_input, check_output
+from backend.services.safety import check_input, check_output, SAFE_OVERRIDE
 from backend.services.stackai_fallback import StackAIFallbackError, call_stackai
 from backend.utils.helpers import stable_bucket
 
@@ -36,18 +36,20 @@ def _build_rag_query(message: str, history: list) -> str:
     """Return an enriched query for vector search.
 
     For short or ambiguous messages (e.g. 'What can I do?', 'How?'),
-    prepend the last assistant turn so the embedding captures the actual topic.
+    prepend the last real assistant turn so the embedding captures the actual topic.
+    Safety override responses are skipped so crisis messages never pollute the query.
     """
     word_count = len(message.split())
     if word_count <= 12:
         for turn in reversed(history):
-            if turn.role == "assistant":
+            if turn.role == "assistant" and SAFE_OVERRIDE not in turn.content:
                 context_snippet = turn.content[:300]
                 return f"{context_snippet}\n\n{message}"
     return message
 
 
 async def route_chat(user_id: str, message: str, session_id: str | None = None, jwt: str | None = None) -> RouteResult:
+    logger.info("safety check_input passed | user_id=%s | text=%.80r", user_id, message)
     safety = check_input(message)
     if safety.triggered and safety.response:
         return RouteResult(response=safety.response, route="safety", safety_triggered=True)
@@ -68,6 +70,7 @@ async def route_chat(user_id: str, message: str, session_id: str | None = None, 
     )
     response = await generate_response(user_message=message, history=history, documents=documents)
 
+    logger.info("llm response received | route=new | word_count=%d | ends_question=%s", len(response.split()), response.strip().endswith("?"))
     output_safety = check_output(response)
     if output_safety.triggered and output_safety.response:
         return RouteResult(response=output_safety.response, route="new_safety", safety_triggered=True)

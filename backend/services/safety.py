@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger("bloom.safety")
 
 
 CRISIS_PATTERNS = [
@@ -95,10 +98,12 @@ def _matches(patterns: list[str], text: str) -> list[str]:
 def check_input(text: str) -> SafetyResult:
     crisis_hits = _matches(CRISIS_PATTERNS, text)
     if crisis_hits:
+        logger.warning("safety check_input tier1 triggered | patterns=%s | text=%.120r", crisis_hits, text)
         return SafetyResult(True, "tier1_input", SAFE_OVERRIDE)
 
     nuance_hits = _matches(NUANCE_PATTERNS, text)
     if len(nuance_hits) >= 2:
+        logger.warning("safety check_input tier2 triggered | patterns=%s | text=%.120r", nuance_hits, text)
         return SafetyResult(True, "tier2_input", SAFE_OVERRIDE)
 
     return SafetyResult(False)
@@ -107,14 +112,17 @@ def check_input(text: str) -> SafetyResult:
 def check_output(text: str) -> SafetyResult:
     # Check for provider-level refusals first
     if _is_provider_refusal(text):
+        logger.warning("safety check_output provider_refusal triggered | word_count=%d | text=%.120r", len(text.split()), text)
         return SafetyResult(True, "provider_refusal", SAFE_OVERRIDE)
 
     crisis_hits = _matches(CRISIS_PATTERNS, text)
     if crisis_hits:
+        logger.warning("safety check_output tier1 triggered | patterns=%s | text=%.120r", crisis_hits, text)
         return SafetyResult(True, "tier1_output", SAFE_OVERRIDE)
 
     nuance_hits = _matches(NUANCE_PATTERNS, text)
     if len(nuance_hits) >= 2:
+        logger.warning("safety check_output tier2 triggered | patterns=%s | text=%.120r", nuance_hits, text)
         return SafetyResult(True, "tier2_output", SAFE_OVERRIDE)
 
     return SafetyResult(False)
