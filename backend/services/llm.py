@@ -58,39 +58,35 @@ ABSOLUTE LIMITS:
 
 
 def build_prompt(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> list[dict[str, str]]:
-    template = ChatPromptTemplate.from_messages(
+    rag_context = render_documents(
         [
-            ("system", "{system_prompt}\n\nRAG context:\n{rag_context}\n"),
-            ("system", "Conversation so far:\n{history}"),
-            ("human", "{user_message}"),
+            {
+                "source": doc.source or "unknown",
+                "topic": doc.topic or "general",
+                "content": doc.content,
+            }
+            for doc in documents
         ]
-    )
+    ) or "No retrieved wellness context was found."
 
-    formatted = template.format_messages(
-        system_prompt=SYSTEM_PROMPT,
-        rag_context=render_documents(
-            [
-                {
-                    "source": doc.source or "unknown",
-                    "topic": doc.topic or "general",
-                    "content": doc.content,
-                }
-                for doc in documents
-            ]
-        )
-        or "No retrieved wellness context was found.",
-        history=render_history(
-            [{"role": turn.role, "content": turn.content} for turn in history]
-        )
-        or "No prior conversation.",
-        user_message=truncate_text(user_message, 2000),
-    )
+    system_content = f"{SYSTEM_PROMPT}\n\nRAG context:\n{rag_context}\n"
+    
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_content}
+    ]
 
-    messages: list[dict[str, str]] = []
-    for message in formatted:
-        role = "user" if message.type == "human" else message.type
-        messages.append({"role": role, "content": message.content})
+    # Add native history messages
+    for turn in history:
+        # Map roles correctly to standard LLM roles
+        role = "assistant" if turn.role == "assistant" else "user"
+        content = turn.content.strip()
+        if content:
+            messages.append({"role": role, "content": content})
+
+    # Add the current user message
+    messages.append({"role": "user", "content": truncate_text(user_message, 2000)})
     return messages
+
 
 import re
 
