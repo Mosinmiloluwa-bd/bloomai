@@ -107,7 +107,7 @@ def _enforce_length(text: str, max_sentences: int = 4) -> str:
     return ' '.join(kept)
 
 
-(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> str:
+async def generate_response(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> str:
     if not settings.model_api_key:
         raise RuntimeError("MODEL_API_KEY is not set.")
 
