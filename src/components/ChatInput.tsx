@@ -15,11 +15,10 @@ export function ChatInput({ onSend, onOpenThoughtRecord, disabled, crisisLock }:
   const handleSend = async () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
-    const sent = await onSend(trimmed);
-    if (sent) {
-      setValue('');
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    }
+    // Clear input immediately so the user gets instant feedback
+    setValue('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    await onSend(trimmed);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {

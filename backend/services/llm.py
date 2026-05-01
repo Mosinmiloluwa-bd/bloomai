@@ -92,8 +92,26 @@ def build_prompt(user_message: str, history: list[ChatTurn], documents: list[Ret
         messages.append({"role": role, "content": message.content})
     return messages
 
+import re
 
-async def generate_response(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> str:
+
+def _enforce_length(text: str, max_sentences: int = 4) -> str:
+    """Hard-cap the response to max_sentences sentences.
+
+    The last sentence (usually the follow-up question) is always preserved.
+    This is a safety net for when the model ignores the system prompt length rule.
+    """
+    # Split on sentence-ending punctuation followed by whitespace or end
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(sentences) <= max_sentences:
+        return text.strip()
+
+    # Keep the first (max_sentences - 1) sentences + the last one (follow-up question)
+    kept = sentences[:max_sentences - 1] + [sentences[-1]]
+    return ' '.join(kept)
+
+
+(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> str:
     if not settings.model_api_key:
         raise RuntimeError("MODEL_API_KEY is not set.")
 
@@ -111,6 +129,7 @@ async def generate_response(user_message: str, history: list[ChatTurn], document
                 "messages": messages,
                 "temperature": 0.1,
                 "top_p": 0.9,
+                "max_tokens": 300,
             },
         )
         if not response.is_success:
@@ -124,4 +143,4 @@ async def generate_response(user_message: str, history: list[ChatTurn], document
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Model returned an empty response.")
-        return content.strip()
+        return _enforce_length(content.strip())
