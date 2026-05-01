@@ -1,0 +1,8 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+httpx==0.28.1
+PyJWT==2.10.1
+supabase==2.15.3
+langchain-core==0.3.74
+langchain-text-splitters==0.3.9
+

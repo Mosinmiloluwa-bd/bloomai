@@ -1,0 +1,33 @@
+version: "1"
+services:
+  - type: web
+    name: bloom-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: MODEL_API_KEY
+        sync: false
+      - key: PRODUCTION_FRONTEND_URL
+        sync: false
+      - key: STACKAI_API_URL
+        sync: false
+      - key: STACKAI_API_KEY
+        sync: false
+      - key: MODEL_BASE_URL
+        value: https://api.openai.com/v1
+      - key: MODEL_NAME
+        value: gpt-4o-mini
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: EMBEDDING_DIMENSION
+        value: 1536
+      - key: ROUTING_PERCENTAGE
+        value: 100
+      - key: RAG_TOP_K
+        value: 4
