@@ -64,6 +64,10 @@ def _is_provider_refusal(text: str) -> bool:
     Strategy: hard pattern OR (structurally long + no question + redirect phrase).
     This is model-agnostic — it catches novel phrasings by shape, not exact words.
     """
+    # Never re-catch our own safety response
+    if SAFE_OVERRIDE in text:
+        return False
+
     if _matches(_HARD_REFUSAL_PATTERNS, text):
         return True
 
