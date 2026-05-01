@@ -75,7 +75,8 @@ async def process_chat(user_id: str, message: str, session_id: str | None = None
 
     try:
         result = await route_chat(user_id=user_id, message=message, session_id=session_id, jwt=jwt)
-    except Exception:
+    except Exception as exc:
+        logger.error("Error in route_chat: %s", exc, exc_info=True)
         try:
             legacy = await call_stackai(message=message, session_id=session_id, user_id=user_id)
             safety = check_output(legacy)
