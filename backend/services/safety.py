@@ -34,9 +34,35 @@ NIGERIAN_SUPPORT_TEXT = (
 )
 
 SAFE_OVERRIDE = (
-    "I’m really sorry you’re carrying this right now. I want to keep you safe and help you get through the next few minutes. "
-    f"{NIGERIAN_SUPPORT_TEXT}"
+    "I hear you, and I'm really glad you said something. Please reach out to Asido's crisis line right now: "
+    "+2349028080416. You matter, and you don't have to carry this alone."
 )
+
+# Individual signal patterns — two or more hits in the same response is treated as a provider refusal.
+_REFUSAL_SIGNALS = [
+    r"I'?m sorry for any inconvenience",
+    r"I'?m (currently )?unable to provide (the )?support",
+    r"I (am an AI|cannot|can not) (and |that )?(provide|offer) (the )?support",
+    r"reach out to a (trusted person|friend or family member)",
+    r"contacting? a mental health professional for additional support",
+    r"Take care\.?\s*$",  # common sign-off on canned refusals
+    r"it'?s (okay|normal|important) to (have difficult emotions|feel sad|seek help)",
+]
+
+_HARD_REFUSAL_PATTERNS = [
+    r"I'?m sorry for any inconvenience.*unable to provide",
+    r"I am an AI and cannot provide (the )?support you need",
+]
+
+
+def _is_provider_refusal(text: str) -> bool:
+    """Return True if the text looks like a canned provider-level refusal."""
+    # Any single hard-match is conclusive
+    if _matches(_HARD_REFUSAL_PATTERNS, text):
+        return True
+    # Two or more weak signals together also indicate a refusal
+    hits = sum(1 for p in _REFUSAL_SIGNALS if re.search(p, text, flags=re.IGNORECASE | re.DOTALL))
+    return hits >= 2
 
 
 @dataclass(slots=True)
@@ -63,6 +89,10 @@ def check_input(text: str) -> SafetyResult:
 
 
 def check_output(text: str) -> SafetyResult:
+    # Check for provider-level refusals first
+    if _is_provider_refusal(text):
+        return SafetyResult(True, "provider_refusal", SAFE_OVERRIDE)
+
     crisis_hits = _matches(CRISIS_PATTERNS, text)
     if crisis_hits:
         return SafetyResult(True, "tier1_output", SAFE_OVERRIDE)
