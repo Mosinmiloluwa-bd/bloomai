@@ -38,19 +38,18 @@ SAFE_OVERRIDE = (
     "+2349028080416. You matter, and you don't have to carry this alone."
 )
 
-# Individual signal patterns — two or more hits in the same response is treated as a provider refusal.
+# Individual signal patterns — these only fire for clearly generic AI refusals.
+# They are deliberately tight so Bloom's own warm responses are never caught.
 _REFUSAL_SIGNALS = [
     r"I'?m sorry for any inconvenience",
-    r"I'?m (currently )?unable to provide (the )?support",
-    r"I (am an AI|cannot|can not) (and |that )?(provide|offer) (the )?support",
-    r"reach out to a (trusted person|friend or family member)",
+    r"I'?m (currently )?unable to provide (the )?support you need",
+    r"I (am an AI|cannot|can not) (and |that )?(provide|offer) (the )?support you need",
+    r"reach out to a trusted person in your life",
     r"contacting? a mental health professional for additional support",
-    r"Take care\.?\s*$",  # common sign-off on canned refusals
-    r"it'?s (okay|normal|important) to (have difficult emotions|feel sad|seek help)",
 ]
 
 _HARD_REFUSAL_PATTERNS = [
-    r"I'?m sorry for any inconvenience.*unable to provide",
+    r"I'?m sorry for any inconvenience.{0,60}unable to provide",
     r"I am an AI and cannot provide (the )?support you need",
 ]
 
@@ -60,9 +59,10 @@ def _is_provider_refusal(text: str) -> bool:
     # Any single hard-match is conclusive
     if _matches(_HARD_REFUSAL_PATTERNS, text):
         return True
-    # Two or more weak signals together also indicate a refusal
+    # Three or more weak signals together indicate a refusal
+    # (threshold raised to 3 so Bloom's own warm sign-offs are never caught)
     hits = sum(1 for p in _REFUSAL_SIGNALS if re.search(p, text, flags=re.IGNORECASE | re.DOTALL))
-    return hits >= 2
+    return hits >= 3
 
 
 @dataclass(slots=True)

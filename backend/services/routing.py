@@ -32,6 +32,21 @@ def _use_new_backend(user_id: str) -> bool:
     return stable_bucket(user_id, 100) < percentage
 
 
+def _build_rag_query(message: str, history: list) -> str:
+    """Return an enriched query for vector search.
+
+    For short or ambiguous messages (e.g. 'What can I do?', 'How?'),
+    prepend the last assistant turn so the embedding captures the actual topic.
+    """
+    word_count = len(message.split())
+    if word_count <= 12:
+        for turn in reversed(history):
+            if turn.role == "assistant":
+                context_snippet = turn.content[:300]
+                return f"{context_snippet}\n\n{message}"
+    return message
+
+
 async def route_chat(user_id: str, message: str, session_id: str | None = None, jwt: str | None = None) -> RouteResult:
     safety = check_input(message)
     if safety.triggered and safety.response:
@@ -48,7 +63,9 @@ async def route_chat(user_id: str, message: str, session_id: str | None = None, 
     if history and history[-1].role == "user" and history[-1].content == message:
         history = history[:-1]
 
-    documents = await retrieve_relevant_documents(message, jwt=jwt)
+    documents = await retrieve_relevant_documents(
+        _build_rag_query(message, history), jwt=jwt
+    )
     response = await generate_response(user_message=message, history=history, documents=documents)
 
     output_safety = check_output(response)
