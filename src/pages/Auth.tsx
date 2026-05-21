@@ -34,7 +34,7 @@ export default function Auth() {
     } catch (err: any) {
       const isNetworkError = err.message === 'Failed to fetch';
       // @ts-ignore - accessing internal URL for debugging
-      const attemptedUrl = supabase.auth?.config?.url || 'Unknown';
+      const attemptedUrl = (supabase as any).supabaseUrl || (supabase.auth as any).url || import.meta.env.VITE_SUPABASE_URL || 'Unknown';
       setError(
         isNetworkError 
           ? `Connection error: Failed to reach ${attemptedUrl}. Please check your internet or if the project is paused.`
