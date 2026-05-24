@@ -95,49 +95,7 @@ export async function sendMessageToStackAI(
     });
     return stream;
   } catch (backendError) {
-    // Only fall back to the legacy StackAI edge function on genuine outage conditions
-    // (network failure, 502 Bad Gateway, 503 Service Unavailable).
-    // Do NOT fall back on auth errors (401) or validation errors (400/422) — those
-    // are real problems that would produce equally wrong results on the legacy path.
-    const isOutage =
-      backendError instanceof TypeError || // network failure (fetch failed)
-      (backendError instanceof Error && /502|503|504/.test(backendError.message));
-
-    if (!isOutage) {
-      throw backendError;
-    }
-    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stackai-chat`;
-    const legacyResponse = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        message,
-        session_id: sessionContext.sessionId,
-        user_id: userId,
-      }),
-    });
-
-    if (!legacyResponse.ok) {
-      throw backendError instanceof Error ? backendError : new Error('Unable to reach the chat service.');
-    }
-
-    const legacyContentType = legacyResponse.headers.get('Content-Type') || '';
-    if (legacyContentType.includes('text/plain') && legacyResponse.body) {
-      return legacyResponse.body;
-    }
-
-    const legacyData = await legacyResponse.json();
-    const legacyOutput = legacyData.response || legacyData.outputs?.['out-0'] || 'No response received.';
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(legacyOutput));
-        controller.close();
-      },
-    });
-    return stream;
+    console.error("Backend error:", backendError);
+    throw backendError;
   }
 }
