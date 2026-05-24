@@ -55,7 +55,7 @@ def auth_headers(jwt: str | None = None) -> dict[str, str]:
     # This ensures RLS is enforced based on the user's uid
     if jwt:
         return {
-            "apikey": jwt,
+            "apikey": get_supabase_admin_key(),
             "Authorization": f"Bearer {jwt}",
             "Content-Type": "application/json",
         }

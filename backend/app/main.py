@@ -40,6 +40,21 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": origin}
     )
 
+try:
+    ExceptionGroup
+except NameError:
+    ExceptionGroup = Exception
+
+@app.exception_handler(ExceptionGroup)
+async def global_exception_group_handler(request: Request, exc: ExceptionGroup):
+    logger.error(f"Unhandled exception group: {exc}", exc_info=True)
+    origin = request.headers.get("origin", "*")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Something went wrong. Please try again."},
+        headers={"Access-Control-Allow-Origin": origin}
+    )
+
 app.include_router(chat_router)
 app.include_router(admin_router)
 
