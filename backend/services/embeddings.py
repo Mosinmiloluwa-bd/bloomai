@@ -33,13 +33,13 @@ async def embed_text(text: str) -> list[float]:
     if not cleaned:
         return [0.0] * settings.embedding_dimension
 
-    if settings.model_api_key:
+    if settings.GROQ_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{settings.model_base_url.rstrip('/')}/embeddings",
                     headers={
-                        "Authorization": f"Bearer {settings.model_api_key}",
+                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
                         "Content-Type": "application/json",
                     },
                     json={

@@ -63,7 +63,7 @@ app.include_router(admin_router)
 async def validate_config() -> None:
     """Check for required environment variables at startup."""
     required = {
-        "MODEL_API_KEY": settings.model_api_key,
+        "GROQ_API_KEY": settings.GROQ_API_KEY,
         "SUPABASE_URL": settings.supabase_url,
     }
     missing = [name for name, value in required.items() if not value]
@@ -98,14 +98,14 @@ async def health_model() -> dict:
     from backend.app.config import settings
     import httpx
 
-    if not settings.model_api_key:
-        return {"status": "error", "reason": "MODEL_API_KEY is not set in environment variables"}
+    if not settings.GROQ_API_KEY:
+        return {"status": "error", "reason": "GROQ_API_KEY is not set in environment variables"}
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{settings.model_base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.model_api_key}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": settings.model_name,
                     "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
