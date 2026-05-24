@@ -7,9 +7,8 @@ from backend.app.dependencies import get_current_user
 from backend.services.classifier import classify_intent, apply_behavioral_policy, MANIPULATION_DEFLECTION
 from backend.services.llm import CRISIS_RESPONSE, detect_crisis, call_with_fallback, check_dependency_language, SYSTEM_PROMPT, build_prompt
 from backend.services.memory import get_history
-from backend.services.rag import retrieve_relevant_documents, filter_retrieved_chunks
+from backend.services.rag import retrieve_relevant_documents, filter_retrieved_chunks, _build_rag_query
 from backend.db.logging import log_turn
-from backend.services.routing import _build_rag_query
 
 import logging
 

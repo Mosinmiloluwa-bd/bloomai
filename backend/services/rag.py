@@ -79,3 +79,18 @@ async def retrieve_relevant_documents(query: str, top_k: int | None = None, jwt:
                 )
             )
         return documents
+
+def _build_rag_query(message: str, history: list) -> str:
+    """Return an enriched query for vector search.
+
+    For short or ambiguous messages (e.g. 'What can I do?', 'How?'),
+    prepend the last real assistant turn so the embedding captures the actual topic.
+    Safety override responses are skipped so crisis messages never pollute the query.
+    """
+    word_count = len(message.split())
+    if word_count <= 12:
+        for turn in reversed(history):
+            if turn.role == "assistant" and "I'm not able to respond to that" not in turn.content:
+                context_snippet = turn.content[:300]
+                return f"{context_snippet}\n\n{message}"
+    return message
