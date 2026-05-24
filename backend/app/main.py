@@ -28,15 +28,10 @@ app.include_router(admin_router)
 
 @app.on_event("startup")
 async def validate_config() -> None:
-    """Check for required environment variables at startup.
-
-    Logs a loud, clear warning so that Render/deployment logs reveal
-    config problems immediately — rather than silently on every user message.
-    """
+    """Check for required environment variables at startup."""
     required = {
         "MODEL_API_KEY": settings.model_api_key,
         "SUPABASE_URL": settings.supabase_url,
-        "SUPABASE_JWT_SECRET": settings.supabase_jwt_secret,
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
@@ -46,10 +41,15 @@ async def validate_config() -> None:
         logger.critical("=" * 60)
     else:
         logger.info("Bloom startup OK — all required env vars present.")
+        logger.info(
+            "JWT verification will use Supabase JWKS endpoint: %s/auth/v1/.well-known/jwks.json",
+            settings.supabase_url.rstrip("/"),
+        )
 
     if not settings.stackai_api_url or not settings.stackai_api_key:
         logger.warning("StackAI fallback is NOT configured (STACKAI_API_URL / STACKAI_API_KEY missing). "
                        "The primary RAG backend is the only chat path.")
+
 
 
 @app.get("/health")
