@@ -61,6 +61,37 @@ Bloom: "Sleep deprivation hits retention harder than most people realise — you
 Is the problem falling asleep, staying asleep, or just not having enough hours?"
 """
 
+from backend.services.memory import ChatTurn
+from backend.services.rag import RetrievedDocument
+from backend.utils.helpers import render_documents, truncate_text
+
+def build_prompt(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> list[dict[str, str]]:
+    rag_context = render_documents(
+        [
+            {
+                "source": doc.source or "unknown",
+                "topic": doc.topic or "general",
+                "content": doc.content,
+            }
+            for doc in documents
+        ]
+    ) if documents else "No retrieved wellness context was found."
+
+    system_content = f"{SYSTEM_PROMPT}\n\nRAG context:\n{rag_context}\n"
+    
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_content}
+    ]
+
+    for turn in history:
+        role = "assistant" if turn.role == "assistant" else "user"
+        content = turn.content.strip()
+        if content:
+            messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": truncate_text(user_message, 2000)})
+    return messages
+
 DEPENDENCY_BLOCKLIST = [
     "i'll never leave you",
     "i'm all you need",
