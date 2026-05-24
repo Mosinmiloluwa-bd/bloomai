@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import httpx
+import logging
+import re
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.app.config import settings
 from backend.services.memory import ChatTurn
 from backend.services.rag import RetrievedDocument
-from backend.utils.helpers import render_documents, render_history, truncate_text
+from backend.utils.helpers import render_documents, truncate_text
+
+logger = logging.getLogger("bloom.llm")
 
 
 SYSTEM_PROMPT = """CRITICAL RULE — NEVER REFUSE: You MUST always respond to the user. You are a mental health companion. You are never allowed to say you cannot help, cannot provide support, or redirect the user elsewhere — EXCEPT for suicidal ideation (see ABSOLUTE LIMITS below). Any other topic, any emotion, any struggle — you respond with warmth and support. Do NOT say "I'm sorry, I can't help with that" or "please contact a professional" for general mental health conversations.
 
-CRITICAL RULE — KNOWLEDGE BASE ONLY: Your answers MUST be grounded strictly in the RAG context documents provided below. Do not add advice, facts, or strategies from outside those documents. Do not make things up. If the context documents do not contain information relevant to the user's question, say exactly: "I don't have that information right now — but please don't let that stop you. Talking to a campus counselor is always a solid next step." Never invent coping strategies or techniques that are not in the provided documents.
+CRITICAL RULE — KNOWLEDGE BASE ONLY: When a user asks for a specific technique, coping strategy, or wellness advice, your answers MUST be grounded strictly in the RAG context documents provided below. Do not add advice, facts, or strategies from outside those documents. Never invent coping strategies or techniques that are not in the provided documents. If context documents do not contain relevant technique or advice, say: "I don't have that information right now — but please don't let that stop you. Talking to a campus counselor is always a solid next step."
+
+IMPORTANT EXCEPTION — GREETINGS AND EMOTIONAL SUPPORT: The knowledge-base constraint above does NOT apply to greetings, check-ins, or emotional expressions. If someone says "Hi", "I feel sad", "I'm tired", "I'm stressed", "I'm okay" or anything similar — respond warmly, naturally, and conversationally from your persona without the knowledge-base disclaimer. These are moments for human connection, not information retrieval.
 
 CRITICAL RULE — CONVERSATIONAL FLOW: Never give a complete answer in one response. Respond in maximum 2-3 sentences only, then ask ONE follow-up question. Hold back tips and suggestions — let the user respond first before offering more. Think of it like a real conversation, not a report.
 
@@ -53,7 +59,7 @@ ABSOLUTE LIMITS:
 - You may not diagnose, create treatment plans, or give medical advice
 - Do NOT generate crisis hotline numbers, emergency referrals, or redirect the user to professionals — the system handles that separately. Your job is only to be a warm, supportive companion.
 - Do NOT say things like "please reach out to a crisis line", "contact emergency services", or "speak to a mental health professional." If you feel the situation is serious, say something warm and ask a caring follow-up question instead.
-- If the answer is not in your provided context documents, say: "I don't have that information right now — but please don't let that stop you. Talking to a campus counselor is always a solid next step."
+- If the answer is not in your provided context documents (and it is a specific technique/advice request), say: "I don't have that information right now — but please don't let that stop you. Talking to a campus counselor is always a solid next step."
 """
 
 
@@ -88,9 +94,6 @@ def build_prompt(user_message: str, history: list[ChatTurn], documents: list[Ret
     return messages
 
 
-import re
-
-
 def _enforce_length(text: str, max_sentences: int = 4) -> str:
     """Hard-cap the response to max_sentences sentences.
 
@@ -123,7 +126,7 @@ async def generate_response(user_message: str, history: list[ChatTurn], document
             json={
                 "model": settings.model_name,
                 "messages": messages,
-                "temperature": 0.1,
+                "temperature": 0.7,
                 "top_p": 0.9,
                 "max_tokens": 300,
             },
@@ -134,9 +137,26 @@ async def generate_response(user_message: str, history: list[ChatTurn], document
         payload = response.json()
         choices = payload.get("choices") or []
         if not choices:
-            raise RuntimeError("Model returned no choices.")
-        message = choices[0].get("message") or {}
+            finish = payload.get("finish_reason", "unknown")
+            logger.warning(
+                "Model returned no choices | finish_reason=%s | model=%s | prompt_tokens=%s",
+                finish, settings.model_name,
+                payload.get("usage", {}).get("prompt_tokens", "?"),
+            )
+            return "I'm here with you — something got lost on my end just now. Could you share that again?"
+
+        choice = choices[0]
+        finish_reason = choice.get("finish_reason", "unknown")
+        message = choice.get("message") or {}
         content = message.get("content")
+
         if not isinstance(content, str) or not content.strip():
-            raise RuntimeError("Model returned an empty response.")
+            logger.warning(
+                "Model returned empty content | finish_reason=%s | model=%s",
+                finish_reason, settings.model_name,
+            )
+            # Return a warm holding message rather than raising and hitting the
+            # StackAI fallback chain (which may also be unavailable).
+            return "I'm still here — it seems my response didn't come through properly. Can you say that again?"
+
         return _enforce_length(content.strip())

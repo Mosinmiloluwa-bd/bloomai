@@ -21,23 +21,32 @@ def _parse_bearer_token(authorization: str | None) -> str:
 
 def get_current_user(authorization: Annotated[str | None, Header(alias="Authorization")] = None) -> CurrentUser:
     token = _parse_bearer_token(authorization)
+
     if not settings.supabase_jwt_secret:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SUPABASE_JWT_SECRET is missing.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server configuration error: SUPABASE_JWT_SECRET is not set.",
+        )
 
+    # Verify the JWT locally using the shared secret — avoids a 150-300ms
+    # network round-trip to Supabase auth API on every single chat request.
     try:
-        # Decode without signature verification just to extract claims (e.g., role)
-        claims = jwt.decode(token, options={"verify_signature": False})
+        claims = jwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired. Please sign in again.",
+        )
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Malformed JWT.") from exc
-
-    try:
-        from backend.db.supabase_client import get_supabase_admin_client
-        client = get_supabase_admin_client()
-        user_resp = client.auth.get_user(token)
-        if not user_resp or not user_resp.user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked Supabase JWT.")
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Supabase JWT.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token. Please sign in again.",
+        ) from exc
 
     user_id = claims.get("sub")
     if not user_id:
@@ -46,10 +55,16 @@ def get_current_user(authorization: Annotated[str | None, Header(alias="Authoriz
     if settings.supabase_url:
         expected_iss = f"{settings.supabase_url.rstrip('/')}/auth/v1"
         if claims.get("iss") != expected_iss:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="JWT issuer does not match this Supabase project.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="JWT issuer does not match this Supabase project.",
+            )
 
     if claims.get("role") not in {"authenticated", "service_role"}:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Supabase JWT role is not authorized.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Supabase JWT role is not authorized.",
+        )
 
     return CurrentUser(
         id=str(user_id),
@@ -57,3 +72,4 @@ def get_current_user(authorization: Annotated[str | None, Header(alias="Authoriz
         token=token,
         claims=claims,
     )
+

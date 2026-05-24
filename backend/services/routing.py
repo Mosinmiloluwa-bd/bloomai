@@ -96,6 +96,7 @@ async def process_chat(user_id: str, message: str, session_id: str | None = None
     try:
         result = await route_chat(user_id=user_id, message=message, session_id=session_id, jwt=jwt)
     except Exception as exc:
+        exc_str = str(exc)
         logger.error("Error in route_chat: %s", exc, exc_info=True)
         try:
             legacy = await call_stackai(message=message, session_id=session_id, user_id=user_id)
@@ -106,10 +107,23 @@ async def process_chat(user_id: str, message: str, session_id: str | None = None
                 result = RouteResult(response=legacy, route="legacy_fallback")
         except StackAIFallbackError as fallback_exc:
             logger.error("StackAI fallback also failed: %s", fallback_exc)
+            # Give a warm, honest message that doesn't feel like a generic crash.
+            # Distinguish a config problem from a transient network issue.
+            if "MODEL_API_KEY" in exc_str or "not set" in exc_str.lower():
+                fallback_response = (
+                    "I'm having some trouble connecting right now — my systems aren't fully online. "
+                    "Please try again in a minute or two."
+                )
+            else:
+                fallback_response = (
+                    "I'm still here with you, but something isn't working on my end just now. "
+                    "Give it a moment and try sending that again — I don't want you to feel unheard."
+                )
             result = RouteResult(
-                response="Something went wrong on my end — really sorry about that. Can you try sending your message again?",
+                response=fallback_response,
                 route="canned_fallback",
             )
 
     await persist("assistant", result.response)
     return result
+

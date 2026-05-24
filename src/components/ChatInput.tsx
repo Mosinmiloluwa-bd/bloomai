@@ -45,9 +45,10 @@ export function ChatInput({ onSend, onOpenThoughtRecord, disabled, crisisLock }:
   return (
     <div className="border-t border-border bg-card p-2.5 sm:p-3" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
       {crisisLock && (
-        <div className="mb-2 text-xs sm:text-sm text-safety-foreground bg-safety rounded-lg px-3 py-2 animate-fade-in-up" role="alert">
-          Before you continue — we see you. Please reach out to a counselor or call{' '}
-          <a href="tel:988" className="font-semibold underline">988</a>.
+      <div className="mb-2 text-xs sm:text-sm text-safety-foreground bg-safety rounded-lg px-3 py-2 animate-fade-in-up" role="alert">
+          We see you, and we care. Please reach out to Asido's crisis line right now:{' '}
+          <a href="tel:+2349028080416" className="font-semibold underline">+234 902 808 0416</a>.
+          You don't have to carry this alone.
         </div>
       )}
       <div className="flex items-end gap-1.5 sm:gap-2 max-w-3xl mx-auto">

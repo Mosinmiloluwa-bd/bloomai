@@ -1,11 +1,11 @@
-import { AlertTriangle, Phone, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, Phone, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 
 const HOTLINES = [
-  { name: 'Suicide & Crisis Lifeline', number: '988', description: 'Call or text 24/7' },
-  { name: 'Crisis Text Line', number: 'Text HOME to 741741', description: 'Free 24/7 support' },
-  { name: 'SAMHSA Helpline', number: '1-800-662-4357', description: 'Free referral service' },
-  { name: 'Trevor Project (LGBTQ+)', number: '1-866-488-7386', description: '24/7 crisis support' },
+  { name: 'Asido Crisis Line', number: '+234 902 808 0416', description: 'Call 24/7 — Nigeria', tel: '+2349028080416' },
+  { name: 'SURPIN', number: '0811 190 9909', description: 'Suicide research & prevention', tel: '08111909909' },
+  { name: 'Nigeria Emergency Services', number: '112', description: 'Nationwide emergency line', tel: '112' },
+  { name: 'Befrienders Worldwide', number: 'www.befrienders.org', description: 'International crisis support', link: 'https://www.befrienders.org' },
 ];
 
 interface SafetyBannerProps {
@@ -23,11 +23,12 @@ export function SafetyBanner({ expanded: forceExpanded }: SafetyBannerProps) {
           <div className="flex-1 min-w-0">
             <p className="text-xs sm:text-sm leading-relaxed">
               This is an AI wellness companion for reflection and support — not a crisis service.
-              If you're in danger, call or text{' '}
-              <a href="tel:988" className="font-semibold underline">
-                Suicide &amp; Crisis Lifeline (988)
+              If you're in danger, call{' '}
+              <a href="tel:+2349028080416" className="font-semibold underline">
+                Asido (+234 902 808 0416)
               </a>{' '}
-              immediately.
+              or emergency services on{' '}
+              <a href="tel:112" className="font-semibold underline">112</a> immediately.
             </p>
           </div>
           <button
@@ -45,10 +46,20 @@ export function SafetyBanner({ expanded: forceExpanded }: SafetyBannerProps) {
           <div className="mt-3 pt-3 border-t border-amber-300/40 grid gap-2 sm:grid-cols-2" role="list">
             {HOTLINES.map(h => (
               <div key={h.name} className="flex items-center gap-2 text-sm" role="listitem">
-                <Phone className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                {h.link
+                  ? <Globe className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                  : <Phone className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                }
                 <div>
                   <span className="font-medium">{h.name}</span>
-                  <span className="text-muted-foreground"> — {h.number}</span>
+                  <span className="text-muted-foreground">
+                    {' '}— {h.link
+                      ? <a href={h.link} target="_blank" rel="noreferrer" className="underline">{h.number}</a>
+                      : h.tel
+                        ? <a href={`tel:${h.tel}`} className="underline">{h.number}</a>
+                        : h.number
+                    }
+                  </span>
                   <span className="text-xs text-muted-foreground block">{h.description}</span>
                 </div>
               </div>

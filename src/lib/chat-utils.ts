@@ -83,13 +83,23 @@ export async function sendMessageToStackAI(
     });
     return stream;
   } catch (backendError) {
-    // Controlled fallback to the legacy StackAI edge function if the new backend is unavailable.
+    // Only fall back to the legacy StackAI edge function on genuine outage conditions
+    // (network failure, 502 Bad Gateway, 503 Service Unavailable).
+    // Do NOT fall back on auth errors (401) or validation errors (400/422) — those
+    // are real problems that would produce equally wrong results on the legacy path.
+    const isOutage =
+      backendError instanceof TypeError || // network failure (fetch failed)
+      (backendError instanceof Error && /502|503|504/.test(backendError.message));
+
+    if (!isOutage) {
+      throw backendError;
+    }
     const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stackai-chat`;
     const legacyResponse = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
         message,
