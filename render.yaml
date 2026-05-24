@@ -21,7 +21,7 @@ services:
       - key: STACKAI_API_KEY
         sync: false
       - key: MODEL_BASE_URL
-        value: https://api.openai.com/v1
+        value: https://api.cerebras.ai/v1
       - key: MODEL_NAME
         value: gpt-4o-mini
       - key: EMBEDDING_MODEL

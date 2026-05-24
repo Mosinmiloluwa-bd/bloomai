@@ -152,12 +152,12 @@ def _record_success(model: str):
     _circuit_state[model] = {"failures": 0, "open": False}
 
 
-async def _call_groq(model: str, messages: list[dict], temperature: float | None = None, max_tokens: int | None = None) -> str:
+async def _call_cerebras(model: str, messages: list[dict], temperature: float | None = None, max_tokens: int | None = None) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            "https://api.cerebras.ai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Authorization": f"Bearer {settings.CEREBRAS_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
@@ -179,7 +179,7 @@ async def call_with_fallback(messages: list[dict], temperature: float | None = N
         if _is_circuit_open(model):
             continue
         try:
-            result = await _call_groq(model, messages, temperature, max_tokens)
+            result = await _call_cerebras(model, messages, temperature, max_tokens)
             _record_success(model)
             return result
         except Exception as e:
