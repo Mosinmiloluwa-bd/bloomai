@@ -40,7 +40,19 @@ export async function sendMessageToStackAI(
 ): Promise<ReadableStream<Uint8Array> | null> {
   const backendBaseUrl = (import.meta.env.VITE_BLOOM_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
   const backendUrl = `${backendBaseUrl}/chat`;
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+
+  if (session && session.expires_at) {
+    const isExpired = session.expires_at < (Date.now() / 1000) + 30; // 30-second buffer
+    if (isExpired) {
+      console.log('Session is expired or close to expiring, refreshing...');
+      const refreshed = await supabase.auth.refreshSession();
+      if (!refreshed.error && refreshed.data.session) {
+        session = refreshed.data.session;
+      }
+    }
+  }
+
   const accessToken = session?.access_token;
 
   if (!accessToken) {
