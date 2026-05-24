@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import logging
 import httpx
 
 from backend.db.supabase_client import auth_headers, rest_base_url
 from backend.utils.helpers import truncate_text
+
+logger = logging.getLogger("bloom.memory")
 
 
 @dataclass(slots=True)
@@ -30,6 +33,13 @@ async def save_message(user_id: str, role: str, content: str, session_id: str | 
             headers=auth_headers(jwt),
             json=payload,
         )
+        if response.status_code == 401 and jwt is not None:
+            logger.warning("save_message failed with 401; retrying with service_role auth.")
+            response = await client.post(
+                f"{rest_base_url()}/messages",
+                headers=auth_headers(None),
+                json=payload,
+            )
         if not response.is_success:
             raise RuntimeError(f"Unable to save message: {response.status_code} {response.text}")
 
@@ -50,6 +60,13 @@ async def get_history(user_id: str, session_id: str | None = None, limit: int = 
             headers=auth_headers(jwt),
             params=params,
         )
+        if response.status_code == 401 and jwt is not None:
+            logger.warning("get_history failed with 401; retrying with service_role auth.")
+            response = await client.get(
+                f"{rest_base_url()}/messages",
+                headers=auth_headers(None),
+                params=params,
+            )
         if not response.is_success:
             raise RuntimeError(f"Unable to load history: {response.status_code} {response.text}")
 

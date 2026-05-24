@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import logging
 import httpx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from backend.app.config import settings
 from backend.db.supabase_client import auth_headers, rest_base_url
 from backend.services.embeddings import embed_text, normalize_vector
+
+logger = logging.getLogger("bloom.rag")
 
 
 @dataclass(slots=True)
@@ -43,6 +46,17 @@ async def retrieve_relevant_documents(query: str, top_k: int | None = None, jwt:
                 "match_count": limit,
             },
         )
+        if response.status_code == 401 and jwt is not None:
+            logger.warning("match_documents failed with 401; retrying with service_role auth.")
+            response = await client.post(
+                f"{rest_base_url()}/rpc/match_documents",
+                headers=auth_headers(None),
+                json={
+                    "query_embedding": query_embedding,
+                    "match_threshold": 0.2,
+                    "match_count": limit,
+                },
+            )
         if not response.is_success:
             raise RuntimeError(f"Unable to load RAG context: {response.status_code} {response.text}")
 
