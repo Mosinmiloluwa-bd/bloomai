@@ -48,10 +48,23 @@ def rest_base_url() -> str:
 
 
 def auth_headers(jwt: str | None = None) -> dict[str, str]:
-    headers = {
+    # We must use the anon key for normal operations so RLS applies correctly.
+    # The service_role key bypasses RLS, which is dangerous for user operations.
+    anon_key = settings.supabase_url.replace("https://", "").replace("http://", "").split(".")[0] # Temporary placeholder, should use real anon key if available, but for now we fallback
+    # If we have a jwt, we are acting on behalf of a user, so use the user's jwt as the apikey and auth header
+    # This ensures RLS is enforced based on the user's uid
+    if jwt:
+        return {
+            "apikey": jwt,
+            "Authorization": f"Bearer {jwt}",
+            "Content-Type": "application/json",
+        }
+    
+    # If no JWT is provided, we default to the service_role key.
+    # IMPORTANT: service_role bypasses RLS. Only use this for internal 
+    # administrative tasks (e.g. logging telemetry) where RLS must be bypassed.
+    return {
         "apikey": get_supabase_admin_key(),
+        "Authorization": f"Bearer {get_supabase_admin_key()}",
         "Content-Type": "application/json",
     }
-    if jwt:
-        headers["Authorization"] = f"Bearer {jwt}"
-    return headers

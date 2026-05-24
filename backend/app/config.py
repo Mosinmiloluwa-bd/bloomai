@@ -8,6 +8,22 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+from pydantic import BaseModel
+
+class ModelConfig(BaseModel):
+    primary: str = "meta-llama/llama-3.1-8b-instruct:free"
+    fallbacks: list[str] = [
+        "mistralai/mistral-7b-instruct:free",
+        "qwen/qwen-2.5-7b-instruct:free"
+    ]
+    temperature: float = 0.4
+    max_tokens: int = 512
+    top_p: float = 0.85
+    frequency_penalty: float = 0.3
+
+MODEL_CONFIG = ModelConfig()
+
+
 @dataclass(frozen=True)
 class Settings:
     supabase_url: str = field(default_factory=lambda: _env("SUPABASE_URL"))

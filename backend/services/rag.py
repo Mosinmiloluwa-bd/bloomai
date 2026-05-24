@@ -20,6 +20,23 @@ class RetrievedDocument:
     source: str | None = None
     topic: str | None = None
     similarity: float | None = None
+    memory_type: str | None = None
+
+
+def filter_retrieved_chunks(chunks: list[RetrievedDocument], risk_assessment=None) -> list[RetrievedDocument]:
+    if risk_assessment:
+        if risk_assessment.crisis_indicators or risk_assessment.emotional_intensity in ("high", "critical") or risk_assessment.looping_behavior:
+            return []
+            
+    filtered = []
+    for chunk in chunks:
+        if chunk.memory_type == "crisis":
+            continue
+        if risk_assessment and risk_assessment.looping_behavior and chunk.memory_type in ("high", "critical"):
+            continue
+        filtered.append(chunk)
+    
+    return filtered[:3]
 
 
 def chunk_documents(text: str) -> list[str]:

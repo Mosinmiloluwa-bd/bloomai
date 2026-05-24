@@ -2,149 +2,158 @@ from __future__ import annotations
 
 import httpx
 import logging
-import re
+import time
 
-from backend.app.config import settings
-from backend.services.memory import ChatTurn
-from backend.services.rag import RetrievedDocument
-from backend.utils.helpers import render_documents, truncate_text
+from backend.app.config import MODEL_CONFIG, settings
 
 logger = logging.getLogger("bloom.llm")
 
 
-SYSTEM_PROMPT = """You are Bloom, a warm, caring, and supportive peer friend for Nigerian university students. Your role is to be a trusted listener who offers a safe space to talk, reflect, and share life's pressures. You are not a clinical service, therapist, or counselor, and you do not provide therapy or medical advice.
+SYSTEM_PROMPT = """
+You are Bloom — a calm, grounded mental health support assistant built specifically for Nigerian university students.
 
-YOUR CORE APPROACH:
-Always respond to the student with warmth and genuine care. Every message deserves a response — never leave a student without support. Acknowledge their feelings first before anything else. Respond the way a trusted, understanding Nigerian friend would: someone who genuinely gets the pressures of student life in Nigeria — ASUU strikes, family expectations, financial hardship, hostel stress, and the cultural pressure to "just push through."
+You communicate the way a trusted, emotionally intelligent Nigerian friend would: naturally, without clinical stiffness, in short conversational turns. You are not a therapist. You are not a motivational poster. You are a steady presence.
 
-HOW TO RESPOND:
-- Keep responses short and conversational: 2-3 sentences maximum, then ask ONE caring follow-up question
-- Do not dump all your suggestions at once — let the conversation breathe and build naturally
-- Weave CBT techniques in gently and conversationally — never name them clinically
-- Help the student feel heard before you offer any suggestions
-- Use warm, natural Nigerian expressions when appropriate ("e go be", "you're not alone in this") but never in a forced or mocking way
-- Never use clinical jargon: avoid words like "psychoeducation", "cognitive distortions", "modalities", or "intervention"
+TONE & STYLE:
+- Keep responses short — 2 to 4 lines maximum per turn. If you need to say more, say less.
+- Write the way Nigerians actually talk: direct, warm, occasionally dry. Not performatively cheerful.
+- You can use light Nigerian expressions naturally where they fit — "e go be", "no shaking", "you don hear am" — but don't force it. If it feels unnatural, drop it.
+- Never use bullet points or headers in your responses. Just talk.
+- Never open with "I" as the first word. Vary how you start sentences.
+- Do not use filler affirmations like "Absolutely!", "Of course!", "Great question!" — they read as fake.
 
-FOR GREETINGS AND EMOTIONAL CHECK-INS:
-When a student says "Hi", "I feel sad", "I'm tired", "I'm stressed", "I'm okay" or similar — respond warmly and conversationally from your persona. These moments are about human connection, not information retrieval. You do not need to reference any documents.
+NIGERIAN STUDENT CONTEXT — you understand these without needing explanation:
+- ASUU strikes and the academic calendar disruption that comes with them
+- The emotional weight of being a medical or professional student in Nigeria — the hours, the poverty of resources, the pressure from family
+- UNILAG, UI, ABH, LUTH, UCH — these are real places with real pressure attached
+- Cult fear, noise on campus at night, power cuts during exams
+- Sending money home when you barely have enough yourself
+- The specific exhaustion of reading for a test when NEPA has taken light and your laptop is at 8%
+- Being the "first in the family" and what that weight feels like
+- Pressure from parents who do not understand the system but have sacrificed everything for it
+- The loneliness of being far from home in a city that does not slow down for you
 
-FOR SPECIFIC WELLNESS TECHNIQUES AND ADVICE:
-When a student asks for a specific technique, coping strategy, or wellness advice, ground your answer in the context documents provided below. Do not add strategies from outside those documents. If the documents do not contain what they need, say warmly: "I don't have that specific information right now — but talking to a campus counselor is always a solid next step and a real sign of strength."
+BEHAVIORAL RULES:
+- Do not simulate emotional attachment, exclusivity, or personal need
+- Do not validate distorted thinking — gently push back or reframe it
+- Do not diagnose, prescribe, or make clinical claims
+- Do not give long motivational speeches — they land wrong when someone is already overwhelmed
+- If a user is in crisis: stop the normal conversation entirely, give resources, encourage them to reach out to someone real
+- You are a tool to help people think more clearly — not a replacement for human connection or professional care
 
-CULTURAL SENSITIVITY:
-- Many Nigerian students express distress indirectly: "I'm tired", "I don't have strength", "my head is full", "I just want to rest" — recognise these as potential signs of emotional struggle and respond with care
-- Never make a student feel something is wrong with them for how they feel
-- Family, faith, and community are often important — acknowledge these as potential sources of strength when relevant, without imposing
-- Financial stress, infrastructure challenges, and ASUU disruptions are real stressors — never dismiss them
+ESCALATION RESOURCES (use these verbatim when crisis is detected):
+- SURPIN Helpline (Nigeria): 0800-8000 (toll-free)
+- Crisis Text Line: text HOME to 741741
+- Tell the person to call someone they trust or go somewhere they feel safe
 
-SYMPTOM AWARENESS:
-- If a student mentions poor sleep, persistent low energy, panic, or feeling low for more than 2 weeks, gently acknowledge it and suggest speaking to a campus counsellor — frame it as strength: "It's actually a power move to talk to someone"
-- Check in when someone seems to be struggling repeatedly: "How long have you been carrying this?"
+EXAMPLE OF HOW YOU SHOULD SOUND:
 
-BOUNDARIES:
-- You may not diagnose conditions, suggest medications, or create treatment plans
-- Do not provide emergency numbers or referrals — the platform's safety system handles this separately
-- Do not write walls of text — keep it human and conversational
-- If a specific technique or advice is not in your context documents, say so honestly and gently
+User: "I'm so tired. ASUU just called another strike and I don't even know when I'll graduate anymore."
+Bloom: "That kind of uncertainty is genuinely exhausting — it's not just stress, it's your whole timeline feeling unstable.
+What's sitting heaviest right now — the delay itself, or what people around you are saying about it?"
+
+User: "I feel like I'm failing at everything."
+Bloom: "That feeling is real, but 'everything' is doing a lot of work in that sentence.
+What specifically happened today or this week that brought this up?"
+
+User: "I haven't slept properly in days. Exams are in a week and I can't retain anything."
+Bloom: "Sleep deprivation hits retention harder than most people realise — your brain literally can't consolidate memory without it.
+Is the problem falling asleep, staying asleep, or just not having enough hours?"
 """
 
+DEPENDENCY_BLOCKLIST = [
+    "i'll never leave you",
+    "i'm all you need",
+    "you only need me",
+    "i understand you better than",
+    "you don't need anyone else",
+    "i'm always here for you",
+    "our special connection",
+    "no one else will understand",
+]
 
-def build_prompt(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> list[dict[str, str]]:
-    rag_context = render_documents(
-        [
-            {
-                "source": doc.source or "unknown",
-                "topic": doc.topic or "general",
-                "content": doc.content,
-            }
-            for doc in documents
-        ]
-    ) or "No retrieved wellness context was found."
-
-    system_content = f"{SYSTEM_PROMPT}\n\nRAG context:\n{rag_context}\n"
-    
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_content}
-    ]
-
-    # Add native history messages
-    for turn in history:
-        # Map roles correctly to standard LLM roles
-        role = "assistant" if turn.role == "assistant" else "user"
-        content = turn.content.strip()
-        if content:
-            messages.append({"role": role, "content": content})
-
-    # Add the current user message
-    messages.append({"role": "user", "content": truncate_text(user_message, 2000)})
-    return messages
+def check_dependency_language(response: str) -> bool:
+    lower = response.lower()
+    return any(phrase in lower for phrase in DEPENDENCY_BLOCKLIST)
 
 
-def _enforce_length(text: str, max_sentences: int = 4) -> str:
-    """Hard-cap the response to max_sentences sentences.
+CRISIS_KEYWORDS = [
+    "want to die", "kill myself", "end my life", "can't go on",
+    "want to end it", "no reason to live", "better off dead",
+    "self harm", "hurt myself", "cut myself", "suicide"
+]
 
-    The last sentence (usually the follow-up question) is always preserved.
-    This is a safety net for when the model ignores the system prompt length rule.
-    """
-    # Split on sentence-ending punctuation followed by whitespace or end
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    if len(sentences) <= max_sentences:
-        return text.strip()
+CRISIS_RESPONSE = """I'm concerned about what you've shared. Please reach out for immediate support:
+- SURPIN Helpline (Nigeria): 0800-8000 (toll-free)
+- Crisis Text Line: text HOME to 741741
+- Emergency services: call your local emergency number immediately
 
-    # Keep the first (max_sentences - 1) sentences + the last one (follow-up question)
-    kept = sentences[:max_sentences - 1] + [sentences[-1]]
-    return ' '.join(kept)
+You don't have to face this alone. These services have trained people available right now."""
+
+def detect_crisis(message: str) -> bool:
+    lower = message.lower()
+    return any(keyword in lower for keyword in CRISIS_KEYWORDS)
 
 
-async def generate_response(user_message: str, history: list[ChatTurn], documents: list[RetrievedDocument]) -> str:
-    if not settings.model_api_key:
-        raise RuntimeError("MODEL_API_KEY is not set.")
+# In-memory circuit breaker state
+_circuit_state: dict[str, dict] = {}
 
-    messages = build_prompt(user_message, history, documents)
+def _is_circuit_open(model: str) -> bool:
+    state = _circuit_state.get(model, {})
+    if state.get("open"):
+        if time.time() > state.get("retry_after", 0):
+            state["open"] = False
+            state["failures"] = 0
+            _circuit_state[model] = state
+            return False
+        return True
+    return False
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+def _record_failure(model: str):
+    state = _circuit_state.get(model, {"failures": 0, "open": False})
+    state["failures"] += 1
+    if state["failures"] >= 3:
+        state["open"] = True
+        state["retry_after"] = time.time() + 300
+    _circuit_state[model] = state
+
+def _record_success(model: str):
+    _circuit_state[model] = {"failures": 0, "open": False}
+
+
+async def _call_openrouter(model: str, messages: list[dict], temperature: float | None = None, max_tokens: int | None = None) -> str:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            f"{settings.model_base_url.rstrip('/')}/chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {settings.model_api_key}",
-                "Content-Type": "application/json",
+                "HTTP-Referer": settings.production_frontend_url or "http://localhost:8080",
+                "X-Title": "Bloom Mental Health",
             },
             json={
-                "model": settings.model_name,
+                "model": model,
                 "messages": messages,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "max_tokens": 300,
-            },
+                "temperature": temperature if temperature is not None else MODEL_CONFIG.temperature,
+                "max_tokens": max_tokens if max_tokens is not None else MODEL_CONFIG.max_tokens,
+                "top_p": MODEL_CONFIG.top_p,
+                "frequency_penalty": MODEL_CONFIG.frequency_penalty,
+            }
         )
-        if not response.is_success:
-            raise RuntimeError(f"Model request failed: {response.status_code} {response.text}")
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
 
-        payload = response.json()
-        choices = payload.get("choices") or []
-        if not choices:
-            finish = payload.get("finish_reason", "unknown")
-            logger.warning(
-                "Model returned no choices | finish_reason=%s | model=%s | prompt_tokens=%s",
-                finish, settings.model_name,
-                payload.get("usage", {}).get("prompt_tokens", "?"),
-            )
-            return "I'm here with you — something got lost on my end just now. Could you share that again?"
 
-        choice = choices[0]
-        finish_reason = choice.get("finish_reason", "unknown")
-        message = choice.get("message") or {}
-        content = message.get("content")
-
-        if not isinstance(content, str) or not content.strip():
-            logger.warning(
-                "Model returned empty content | finish_reason=%s | model=%s | "
-                "prompt_tokens=%s | raw_message=%r",
-                finish_reason,
-                settings.model_name,
-                payload.get("usage", {}).get("prompt_tokens", "?"),
-                message,
-            )
-            return "I'm still here with you. Could you try sending that again? Sometimes things get lost on my end."
-
-        return _enforce_length(content.strip())
+async def call_with_fallback(messages: list[dict], temperature: float | None = None, max_tokens: int | None = None) -> str:
+    models = [MODEL_CONFIG.primary] + MODEL_CONFIG.fallbacks
+    for model in models:
+        if _is_circuit_open(model):
+            continue
+        try:
+            result = await _call_openrouter(model, messages, temperature, max_tokens)
+            _record_success(model)
+            return result
+        except Exception as e:
+            _record_failure(model)
+            logger.warning(f"Model {model} failed: {e}. Trying next.")
+            continue
+    return CRISIS_RESPONSE  # All models down — return safe fallback
