@@ -52,10 +52,6 @@ async def validate_config() -> None:
             settings.supabase_url.rstrip("/"),
         )
 
-    if not settings.stackai_api_url or not settings.stackai_api_key:
-        logger.warning("StackAI fallback is NOT configured (STACKAI_API_URL / STACKAI_API_KEY missing). "
-                       "The primary RAG backend is the only chat path.")
-
 
 
 @app.get("/health")

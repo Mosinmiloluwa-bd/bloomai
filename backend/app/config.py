@@ -35,8 +35,6 @@ class Settings:
     embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "text-embedding-3-small"))
     routing_percentage: int = field(default_factory=lambda: int(_env("ROUTING_PERCENTAGE", "100") or 100))
     production_frontend_url: str = field(default_factory=lambda: _env("PRODUCTION_FRONTEND_URL"))
-    stackai_api_url: str = field(default_factory=lambda: _env("STACKAI_API_URL"))
-    stackai_api_key: str = field(default_factory=lambda: _env("STACKAI_API_KEY"))
     app_name: str = field(default_factory=lambda: _env("APP_NAME", "Bloom"))
     rag_top_k: int = field(default_factory=lambda: int(_env("RAG_TOP_K", "4") or 4))
     embedding_dimension: int = field(default_factory=lambda: int(_env("EMBEDDING_DIMENSION", "1536") or 1536))
