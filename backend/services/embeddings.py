@@ -54,8 +54,9 @@ async def embed_text(text: str) -> list[float]:
                         embedding = data[0].get("embedding")
                         if isinstance(embedding, list) and embedding:
                             return [float(value) for value in embedding]
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger("bloom.embeddings").error(f"Embedding API failed: {e}", exc_info=True)
 
     return _hash_embedding(cleaned, settings.embedding_dimension)
 

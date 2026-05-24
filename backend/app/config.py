@@ -11,10 +11,10 @@ def _env(name: str, default: str = "") -> str:
 from pydantic import BaseModel
 
 class ModelConfig(BaseModel):
-    primary: str = "meta-llama/llama-3.1-8b-instruct:free"
+    primary: str = "deepseek/deepseek-v4-flash:free"
     fallbacks: list[str] = [
-        "mistralai/mistral-7b-instruct:free",
-        "qwen/qwen-2.5-7b-instruct:free"
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free"
     ]
     temperature: float = 0.4
     max_tokens: int = 512
@@ -31,7 +31,7 @@ class Settings:
     supabase_jwt_secret: str = field(default_factory=lambda: _env("SUPABASE_JWT_SECRET"))
     model_api_key: str = field(default_factory=lambda: _env("MODEL_API_KEY"))
     model_base_url: str = field(default_factory=lambda: _env("MODEL_BASE_URL", "https://api.openai.com/v1"))
-    model_name: str = field(default_factory=lambda: _env("MODEL_NAME", "gpt-4o-mini"))
+    model_name: str = field(default_factory=lambda: _env("MODEL_NAME", MODEL_CONFIG.primary))
     embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "text-embedding-3-small"))
     routing_percentage: int = field(default_factory=lambda: int(_env("ROUTING_PERCENTAGE", "100") or 100))
     production_frontend_url: str = field(default_factory=lambda: _env("PRODUCTION_FRONTEND_URL"))

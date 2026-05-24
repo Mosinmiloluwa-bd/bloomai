@@ -47,17 +47,24 @@ async def get_history(user_id: str, session_id: str | None = None, limit: int = 
     if session_id:
         params.append(("session_id", f"eq.{session_id}"))
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(
-            f"{rest_base_url()}/messages",
-            headers=auth_headers(jwt),
-            params=params,
-        )
-        if not response.is_success:
-            raise RuntimeError(f"Unable to load history: {response.status_code} {response.text}")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                f"{rest_base_url()}/messages",
+                headers=auth_headers(jwt),
+                params=params,
+            )
+            if not response.is_success:
+                raise RuntimeError(f"Unable to load history: {response.status_code} {response.text}")
 
-        rows = response.json()
-        return [ChatTurn(role=row["role"], content=row["content"], created_at=row.get("created_at")) for row in rows]
+            rows = response.json()
+            return [ChatTurn(role=row["role"], content=row["content"], created_at=row.get("created_at")) for row in rows]
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(keyword in error_msg for keyword in ["expired", "jwt", "unauthorized", "invalid token"]):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+        raise
 
 
 def format_history(history: list[ChatTurn]) -> str:

@@ -185,6 +185,6 @@ async def call_with_fallback(messages: list[dict], temperature: float | None = N
             return result
         except Exception as e:
             _record_failure(model)
-            logger.warning(f"Model {model} failed: {e}. Trying next.")
+            logger.error(f"Model {model} failed: {e}. Trying next.", exc_info=True)
             continue
     return CRISIS_RESPONSE  # All models down — return safe fallback

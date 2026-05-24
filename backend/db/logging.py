@@ -66,4 +66,4 @@ async def _log_turn_internal(
                 json=payload
             )
     except Exception as e:
-        logger.error(f"Failed to log conversation turn: {e}")
+        logger.error(f"Failed to log conversation turn: {e}", exc_info=True)

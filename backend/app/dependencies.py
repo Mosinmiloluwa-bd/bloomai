@@ -119,7 +119,7 @@ def _decode_claims(token: str) -> dict:
         # Fall back to unverified decode so the app stays running.
         logger.error(
             "JWT verification failed — falling back to unverified decode. "
-            "Error: %s", exc,
+            "Error: %s", exc, exc_info=True
         )
         return _read_jwt_payload_unsafe(token)
 

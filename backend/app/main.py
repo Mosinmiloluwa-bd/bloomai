@@ -28,6 +28,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "apikey", "x-client-info"],
 )
 
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    origin = request.headers.get("origin", "*")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Something went wrong. Please try again."},
+        headers={"Access-Control-Allow-Origin": origin}
+    )
+
 app.include_router(chat_router)
 app.include_router(admin_router)
 
