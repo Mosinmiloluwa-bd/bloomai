@@ -71,19 +71,39 @@ def _read_jwt_payload_unsafe(token: str) -> dict:
 def _decode_claims(token: str) -> dict:
     """Verify and decode a Supabase JWT.
 
-    Primary path  — JWKS verification (handles RS256, ES256, HS256).
-    Fallback path — raw base64 payload read if JWKS endpoint is unreachable
-                    (e.g. during Supabase maintenance). Issuer is still checked.
+    Primary path  — If HS256 (symmetric key), we use settings.supabase_jwt_secret.
+                    If RS256/ES256 (asymmetric keys), we fetch the public key via JWKS.
+    Fallback path — raw base64 payload read if verification fails due to JWKS or network errors.
     """
     try:
-        client = _get_jwks_client()
-        signing_key = client.get_signing_key_from_jwt(token)
-        return jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256", "ES256", "HS256"],
-            options={"verify_aud": False},
-        )
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "HS256")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Malformed session token. Please sign out and sign in again.",
+        ) from exc
+
+    try:
+        if alg == "HS256":
+            if not settings.supabase_jwt_secret:
+                logger.warning("SUPABASE_JWT_SECRET not configured. Falling back to unsafe decode for HS256 token.")
+                return _read_jwt_payload_unsafe(token)
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+        else:
+            client = _get_jwks_client()
+            signing_key = client.get_signing_key_from_jwt(token)
+            return jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
+                options={"verify_aud": False},
+            )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -95,11 +115,11 @@ def _decode_claims(token: str) -> dict:
             detail="Invalid session token. Please sign in again.",
         ) from exc
     except (PyJWKClientError, Exception) as exc:
-        # JWKS endpoint unreachable (network error, Supabase down, etc.)
+        # JWKS endpoint unreachable or other unexpected verification failure
         # Fall back to unverified decode so the app stays running.
         logger.error(
-            "JWKS verification failed — falling back to unverified decode. "
-            "This is a temporary degraded state. Error: %s", exc,
+            "JWT verification failed — falling back to unverified decode. "
+            "Error: %s", exc,
         )
         return _read_jwt_payload_unsafe(token)
 
