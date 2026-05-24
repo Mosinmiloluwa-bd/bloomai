@@ -63,6 +63,47 @@ async def ping() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/health/model")
+async def health_model() -> dict:
+    """Test the model API connection. Visit this URL in a browser to verify the AI is working."""
+    from backend.app.config import settings
+    import httpx
+
+    if not settings.model_api_key:
+        return {"status": "error", "reason": "MODEL_API_KEY is not set in environment variables"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{settings.model_base_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.model_api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.model_name,
+                    "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
+                    "max_tokens": 10,
+                    "temperature": 0.1,
+                },
+            )
+        payload = response.json()
+        if not response.is_success:
+            return {"status": "error", "http_status": response.status_code, "detail": payload}
+
+        choices = payload.get("choices") or []
+        if not choices:
+            return {"status": "error", "reason": "Model returned no choices", "raw": payload}
+
+        choice = choices[0]
+        content = (choice.get("message") or {}).get("content")
+        return {
+            "status": "ok" if content else "empty_response",
+            "model": settings.model_name,
+            "finish_reason": choice.get("finish_reason"),
+            "content": content,
+        }
+    except Exception as exc:
+        return {"status": "error", "reason": str(exc)}
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     response = await call_next(request)
