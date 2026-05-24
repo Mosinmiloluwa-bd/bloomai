@@ -41,7 +41,7 @@ async def get_history(user_id: str, session_id: str | None = None, limit: int = 
     params: list[tuple[str, str]] = [
         ("select", "role,content,created_at"),
         ("user_id", f"eq.{user_id}"),
-        ("order", "created_at.asc"),
+        ("order", "created_at.desc"),
         ("limit", str(limit)),
     ]
     if session_id:
@@ -58,6 +58,7 @@ async def get_history(user_id: str, session_id: str | None = None, limit: int = 
                 raise RuntimeError(f"Unable to load history: {response.status_code} {response.text}")
 
             rows = response.json()
+            rows.reverse()
             return [ChatTurn(role=row["role"], content=row["content"], created_at=row.get("created_at")) for row in rows]
     except Exception as e:
         error_msg = str(e).lower()

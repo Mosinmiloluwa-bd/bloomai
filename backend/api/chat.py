@@ -6,7 +6,7 @@ from backend.models.schemas import ChatRequest, ChatResponse, CurrentUser
 from backend.app.dependencies import get_current_user
 from backend.services.classifier import classify_intent, apply_behavioral_policy, MANIPULATION_DEFLECTION
 from backend.services.llm import CRISIS_RESPONSE, detect_crisis, call_with_fallback, check_dependency_language, SYSTEM_PROMPT, build_prompt
-from backend.services.memory import get_history
+from backend.services.memory import get_history, save_message
 from backend.services.rag import retrieve_relevant_documents, filter_retrieved_chunks, _build_rag_query
 from backend.db.logging import log_turn
 
@@ -102,6 +102,24 @@ async def chat_endpoint(
         response_text = "I'm not qualified to give medical advice on that. A mental health professional would be the right person to speak to."
 
     # Stage 7: Persist
+    # Save the user's message
+    await save_message(
+        user_id=current_user.id,
+        role="user",
+        content=payload.message,
+        session_id=payload.session_id,
+        jwt=current_user.token
+    )
+    
+    # Save the assistant's response
+    await save_message(
+        user_id=current_user.id,
+        role="assistant",
+        content=response_text,
+        session_id=payload.session_id,
+        jwt=current_user.token
+    )
+
     await log_turn(
         user_id=current_user.id,
         message=payload.message,
