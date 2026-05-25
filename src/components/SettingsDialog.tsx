@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Settings, User, Trash2, LogOut } from "lucide-react";
+import { Settings, User, Trash2, LogOut, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
 import { getCurrentUser, deleteSession } from "@/lib/db-utils";
@@ -86,7 +86,14 @@ export const SettingsDialog = ({ currentSessionId, onSessionDeleted }: SettingsD
           <Settings className="w-5 h-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md bg-background border-border">
+      <DialogContent className="sm:max-w-md bg-background border-border relative">
+        <button
+          onClick={() => setOpen(false)}
+          className="absolute top-2 right-2 flex items-center justify-center min-w-[44px] min-h-[44px] rounded-full hover:bg-secondary/80 transition-colors md:hidden z-50 text-foreground"
+          aria-label="Close settings"
+        >
+          <X size={24} />
+        </button>
         <DialogHeader>
           <DialogTitle className="font-display">Your Profile & Settings</DialogTitle>
           <DialogDescription>
