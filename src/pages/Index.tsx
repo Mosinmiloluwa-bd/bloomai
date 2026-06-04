@@ -219,14 +219,17 @@ export default function Index() {
         const events = chunkStr.split('\n\n');
         
         for (const event of events) {
-          if (!event.trim()) continue;
-          const dataStr = event.replace(/^data:\s*/, '');
-          if (dataStr === '[DONE]') {
+          const trimmedEvent = event.trim();
+          if (!trimmedEvent) continue;
+          if (!trimmedEvent.startsWith('data: ')) continue;
+          
+          const payload = trimmedEvent.slice(6);
+          if (payload === '[DONE]') {
             setIsTyping(false);
             continue;
           }
           try {
-            const data = JSON.parse(dataStr);
+            const data = JSON.parse(payload);
             if (!responseStarted && data.text) {
               responseStarted = true;
               setIsTyping(false);
