@@ -20,7 +20,7 @@
 - [ ] Confirm RLS behavior for authenticated users in production.
 - [ ] Confirm the admin re-ingest endpoint is protected and not exposed publicly.
 - [ ] Rotate any secrets that were pasted into chat.
-- [ ] Verify the StackAI fallback URL and key still work in production.
+
 - [ ] Decide whether routing should stay at 100% to FastAPI or be gradually rolled out.
 - [ ] Add source document curation rules for future knowledge-base additions.
 - [ ] Add monitoring or alerting for backend failures, auth failures, and ingestion errors.
@@ -31,6 +31,6 @@
 
 - [ ] Add a scheduled re-ingestion flow if the knowledge base changes often.
 - [ ] Add a lightweight health dashboard for pilot ops.
-- [ ] Remove or archive the legacy StackAI path when no longer needed.
+
 - [ ] Add more curated wellness sources if the pilot expands.
 

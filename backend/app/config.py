@@ -11,10 +11,10 @@ def _env(name: str, default: str = "") -> str:
 from pydantic import BaseModel
 
 class ModelConfig(BaseModel):
-    primary: str = "llama-3.3-70b"
+    primary: str = "llama-3.3-70b-versatile"
     fallbacks: list[str] = [
-        "llama-3.1-70b",
-        "llama-3.1-8b"
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768"
     ]
     temperature: float = 0.4
     max_tokens: int = 512
@@ -29,8 +29,8 @@ class Settings:
     supabase_url: str = field(default_factory=lambda: _env("SUPABASE_URL"))
     supabase_service_role_key: str = field(default_factory=lambda: _env("SUPABASE_SERVICE_ROLE_KEY"))
     supabase_jwt_secret: str = field(default_factory=lambda: _env("SUPABASE_JWT_SECRET"))
-    CEREBRAS_API_KEY: str = field(default_factory=lambda: _env("CEREBRAS_API_KEY"))
-    model_base_url: str = field(default_factory=lambda: _env("MODEL_BASE_URL", "https://api.cerebras.ai/v1"))
+    GROQ_API_KEY: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
+    model_base_url: str = field(default_factory=lambda: _env("MODEL_BASE_URL", "https://api.groq.com/openai/v1"))
     model_name: str = field(default_factory=lambda: _env("MODEL_NAME", MODEL_CONFIG.primary))
     embedding_model: str = field(default_factory=lambda: _env("EMBEDDING_MODEL", "text-embedding-3-small"))
     routing_percentage: int = field(default_factory=lambda: int(_env("ROUTING_PERCENTAGE", "100") or 100))

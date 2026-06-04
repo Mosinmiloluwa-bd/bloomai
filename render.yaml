@@ -16,12 +16,9 @@ services:
         sync: false
       - key: PRODUCTION_FRONTEND_URL
         sync: false
-      - key: STACKAI_API_URL
-        sync: false
-      - key: STACKAI_API_KEY
-        sync: false
+
       - key: MODEL_BASE_URL
-        value: https://api.cerebras.ai/v1
+        value: https://api.groq.com/openai/v1
       - key: MODEL_NAME
         value: gpt-4o-mini
       - key: EMBEDDING_MODEL

@@ -30,14 +30,13 @@ export function detectCrisisLanguage(text: string): boolean {
 }
 
 /**
- * Sends a user message to the FastAPI backend first, with a controlled
- * fallback to the legacy StackAI edge function if the new backend is down.
+ * Sends a user message to the FastAPI backend.
  */
-export async function sendMessageToStackAI(
+export async function sendChatMessage(
   message: string,
   sessionContext: SessionContext,
   userId: string
-): Promise<ReadableStream<Uint8Array> | null> {
+): Promise<Response> {
   const backendBaseUrl = (import.meta.env.VITE_BLOOM_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
   const backendUrl = `${backendBaseUrl}/chat`;
   let { data: { session } } = await supabase.auth.getSession();
@@ -78,22 +77,7 @@ export async function sendMessageToStackAI(
       throw new Error(backendError);
     }
 
-    const contentType = response.headers.get('Content-Type') || '';
-    if (contentType.includes('text/plain') && response.body) {
-      return response.body;
-    }
-
-    const data = await response.json();
-    const output = data.response || 'No response received.';
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(output));
-        controller.close();
-      },
-    });
-    return stream;
+    return response;
   } catch (backendError) {
     console.error("Backend error:", backendError);
     throw backendError;

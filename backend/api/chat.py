@@ -1,5 +1,7 @@
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
+import json
 
 from backend.app.config import settings
 from backend.models.schemas import ChatRequest, ChatResponse, CurrentUser
@@ -15,7 +17,7 @@ import logging
 router = APIRouter()
 logger = logging.getLogger("bloom.chat")
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat_endpoint(
     payload: ChatRequest,
     request: Request,
@@ -34,7 +36,7 @@ async def chat_endpoint(
             crisis_flag=True,
             latency_ms=int((time.time() - start_time) * 1000)
         )
-        return ChatResponse(response=CRISIS_RESPONSE)
+        return JSONResponse(content={"response": CRISIS_RESPONSE})
         
     # Stage 2: Intent classification
     session_history_objs = await get_history(current_user.id, session_id=payload.session_id, jwt=current_user.token, limit=5)
@@ -53,80 +55,91 @@ async def chat_endpoint(
             risk=risk,
             latency_ms=int((time.time() - start_time) * 1000)
         )
-        return ChatResponse(response=MANIPULATION_DEFLECTION)
+        return JSONResponse(content={"response": MANIPULATION_DEFLECTION})
         
-    # Stage 4: Assemble messages
-    system_prompt = SYSTEM_PROMPT + policy.system_suffix
-    
-    memory = []
-    if policy.allow_rag:
-        raw_docs = await retrieve_relevant_documents(
-            _build_rag_query(payload.message, session_history_objs), 
-            jwt=current_user.token
-        )
-        memory = filter_retrieved_chunks(raw_docs, risk)
+    async def generate_response():
+        # Stage 4: Assemble messages
+        system_prompt = SYSTEM_PROMPT + policy.system_suffix
         
-    messages = build_prompt(payload.message, session_history_objs, memory)
-    # inject overridden system prompt
-    messages[0]["content"] = system_prompt
-    
-    # Stage 5: Inference
-    try:
-        response_text = await call_with_fallback(
-            messages,
-            temperature=policy.temperature_override,
-            max_tokens=policy.max_tokens_override
-        )
-    except Exception as e:
-        logger.error(f"Inference failed: {e}", exc_info=True)
-        response_text = CRISIS_RESPONSE
-
-    # Stage 6: Output safety review
-    if check_dependency_language(response_text):
-        # Regenerate once
-        try:
-            response_text = await call_with_fallback(
-                messages,
-                temperature=0.2,
-                max_tokens=policy.max_tokens_override
+        memory = []
+        if policy.allow_rag:
+            raw_docs = await retrieve_relevant_documents(
+                _build_rag_query(payload.message, session_history_objs), 
+                jwt=current_user.token
             )
-            if check_dependency_language(response_text):
-                response_text = "I'm here to help you reflect. It sounds like connection is important to you — that's worth exploring with people in your life too."
-        except Exception as e:
-            logger.error(f"Inference regeneration failed: {e}", exc_info=True)
-            response_text = "I'm here to help you reflect. It sounds like connection is important to you — that's worth exploring with people in your life too."
+            memory = filter_retrieved_chunks(raw_docs, risk)
             
-    # Clinical advice scan
-    clinical_patterns = ["you have ", "you are diagnosed", "you should take", "your medication"]
-    if any(p in response_text.lower() for p in clinical_patterns):
-        response_text = "I'm not qualified to give medical advice on that. A mental health professional would be the right person to speak to."
+        messages = build_prompt(payload.message, session_history_objs, memory)
+        messages[0]["content"] = system_prompt
+        
+        # Stage 5: Inference
+        buffer = []
+        stream_failed = False
+        from backend.services.llm import stream_from_groq
+        try:
+            async for chunk in stream_from_groq(
+                messages,
+                temperature=policy.temperature_override,
+                max_tokens=policy.max_tokens_override
+            ):
+                if chunk == "data: [DONE]\n\n":
+                    pass # Handled after Stage 6
+                elif chunk.startswith("data: {"):
+                    try:
+                        data = json.loads(chunk[6:].strip())
+                        if "text" in data:
+                            buffer.append(data["text"])
+                        elif "error" in data:
+                            stream_failed = True
+                    except:
+                        pass
+                    yield chunk
+        except Exception as e:
+            logger.error(f"Inference stream failed: {e}")
+            stream_failed = True
 
-    # Stage 7: Persist
-    # Save the user's message
-    await save_message(
-        user_id=current_user.id,
-        role="user",
-        content=payload.message,
-        session_id=payload.session_id,
-        jwt=current_user.token
-    )
-    
-    # Save the assistant's response
-    await save_message(
-        user_id=current_user.id,
-        role="assistant",
-        content=response_text,
-        session_id=payload.session_id,
-        jwt=current_user.token
-    )
+        if not stream_failed:
+            full_response = "".join(buffer)
+            
+            # Stage 6: Output safety review
+            safe = True
+            if check_dependency_language(full_response):
+                safe = False
+            clinical_patterns = ["you have ", "you are diagnosed", "you should take", "your medication"]
+            if any(p in full_response.lower() for p in clinical_patterns):
+                safe = False
+                
+            if not safe:
+                safe_fallback = "I'm here to help you reflect. It sounds like connection is important to you — that's worth exploring with people in your life too."
+                yield f"data: {json.dumps({'replace': safe_fallback})}\n\n"
+                full_response = safe_fallback
+            else:
+                yield "data: [DONE]\n\n"
 
-    await log_turn(
-        user_id=current_user.id,
-        message=payload.message,
-        response=response_text,
-        session_id=payload.session_id,
-        risk=risk,
-        latency_ms=int((time.time() - start_time) * 1000)
-    )
+            # Stage 7: Persist
+            await save_message(
+                user_id=current_user.id,
+                role="user",
+                content=payload.message,
+                session_id=payload.session_id,
+                jwt=current_user.token
+            )
+            
+            await save_message(
+                user_id=current_user.id,
+                role="assistant",
+                content=full_response,
+                session_id=payload.session_id,
+                jwt=current_user.token
+            )
 
-    return ChatResponse(response=response_text)
+            await log_turn(
+                user_id=current_user.id,
+                message=payload.message,
+                response=full_response,
+                session_id=payload.session_id,
+                risk=risk,
+                latency_ms=int((time.time() - start_time) * 1000)
+            )
+
+    return StreamingResponse(generate_response(), media_type="text/event-stream")

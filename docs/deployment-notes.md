@@ -14,7 +14,7 @@
 
 1. Set `PRODUCTION_FRONTEND_URL` to the deployed frontend origin.
 2. Set `VITE_BLOOM_BACKEND_URL` to the deployed backend origin in the frontend environment.
-3. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `MODEL_API_KEY`, `STACKAI_API_URL`, and `STACKAI_API_KEY` in the backend host.
+3. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, and `MODEL_API_KEY` in the backend host.
 4. Keep `ROUTING_PERCENTAGE` at the desired rollout percentage.
 5. Confirm CORS allows the deployed frontend origin.
 6. Rotate any secrets that were ever shared in chat.

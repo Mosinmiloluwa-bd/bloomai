@@ -16,7 +16,7 @@ import {
   type Message,
   type SessionContext,
   detectCrisisLanguage,
-  sendMessageToStackAI,
+  sendChatMessage,
 } from '@/lib/chat-utils';
 import {
   getChatHistory,
@@ -192,34 +192,73 @@ export default function Index() {
     setIsTyping(true);
 
     try {
-      const stream = await sendMessageToStackAI(content, session, user.id);
-      if (!stream) throw new Error('No response stream');
+      const response = await sendChatMessage(content, session, user.id);
 
       setSession(prev => prev ? { ...prev, messageCount: prev.messageCount + 1 } : null);
 
-      const reader = stream.getReader();
+      const contentType = response.headers.get('Content-Type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        const output = data.response || 'No response received.';
+        setIsTyping(false);
+        setMessages(prev => [...prev, { id: `msg_${Date.now()}_ai`, role: 'assistant', content: output, timestamp: new Date() }]);
+        return true;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response stream');
       const decoder = new TextDecoder();
       let fullText = '';
       const assistantId = `msg_${Date.now()}_ai`;
 
-      setIsTyping(false);
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (!responseStarted) {
-          responseStarted = true;
-          recordPilotFirstResponseLatency(performance.now() - requestStartedAt);
-        }
-        fullText += decoder.decode(value, { stream: true });
-
-        setMessages(prev => {
-          const existing = prev.find(m => m.id === assistantId);
-          if (existing) {
-            return prev.map(m => m.id === assistantId ? { ...m, content: fullText } : m);
+        
+        const chunkStr = decoder.decode(value, { stream: true });
+        const events = chunkStr.split('\n\n');
+        
+        for (const event of events) {
+          if (!event.trim()) continue;
+          const dataStr = event.replace(/^data:\s*/, '');
+          if (dataStr === '[DONE]') {
+            setIsTyping(false);
+            continue;
           }
-          return [...prev, { id: assistantId, role: 'assistant', content: fullText, timestamp: new Date() }];
-        });
+          try {
+            const data = JSON.parse(dataStr);
+            if (!responseStarted && data.text) {
+              responseStarted = true;
+              setIsTyping(false);
+              recordPilotFirstResponseLatency(performance.now() - requestStartedAt);
+            }
+            if (data.text) {
+              fullText += data.text;
+              setMessages(prev => {
+                const existing = prev.find(m => m.id === assistantId);
+                if (existing) {
+                  return prev.map(m => m.id === assistantId ? { ...m, content: fullText } : m);
+                }
+                return [...prev, { id: assistantId, role: 'assistant', content: fullText, timestamp: new Date() }];
+              });
+            } else if (data.replace) {
+              fullText = data.replace;
+              setIsTyping(false);
+              setMessages(prev => {
+                const existing = prev.find(m => m.id === assistantId);
+                if (existing) {
+                  return prev.map(m => m.id === assistantId ? { ...m, content: fullText } : m);
+                }
+                return [...prev, { id: assistantId, role: 'assistant', content: fullText, timestamp: new Date() }];
+              });
+            } else if (data.error) {
+              setIsTyping(false);
+              toast.error('Something went wrong, please try again');
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE event', e);
+          }
+        }
       }
       
       return true;

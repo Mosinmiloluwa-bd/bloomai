@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 import logging
 import time
+import json
 
 from backend.app.config import MODEL_CONFIG, settings
 
@@ -380,19 +381,21 @@ def _record_success(model: str):
     _circuit_state[model] = {"failures": 0, "open": False}
 
 
-async def _call_cerebras(model: str, messages: list[dict], temperature: float | None = None, max_tokens: int | None = None) -> str:
+async def _call_groq(model: str, messages: list[dict],
+                     temperature: float = None,
+                     max_tokens: int = None) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            "https://api.cerebras.ai/v1/chat/completions",
+            "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.CEREBRAS_API_KEY}",
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
                 "model": model,
                 "messages": messages,
-                "temperature": temperature if temperature is not None else MODEL_CONFIG.temperature,
-                "max_tokens": max_tokens if max_tokens is not None else MODEL_CONFIG.max_tokens,
+                "temperature": temperature or MODEL_CONFIG.temperature,
+                "max_tokens": max_tokens or MODEL_CONFIG.max_tokens,
                 "top_p": MODEL_CONFIG.top_p,
                 "frequency_penalty": MODEL_CONFIG.frequency_penalty,
             }
@@ -407,7 +410,7 @@ async def call_with_fallback(messages: list[dict], temperature: float | None = N
         if _is_circuit_open(model):
             continue
         try:
-            result = await _call_cerebras(model, messages, temperature, max_tokens)
+            result = await _call_groq(model, messages, temperature, max_tokens)
             _record_success(model)
             return result
         except Exception as e:
@@ -415,3 +418,44 @@ async def call_with_fallback(messages: list[dict], temperature: float | None = N
             logger.error(f"Model {model} failed: {e}. Trying next.", exc_info=True)
             continue
     return CRISIS_RESPONSE  # All models down — return safe fallback
+
+async def stream_from_groq(messages: list[dict], temperature: float = None, max_tokens: int = None):
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            async with client.stream(
+                "POST",
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MODEL_CONFIG.primary,
+                    "messages": messages,
+                    "temperature": temperature or MODEL_CONFIG.temperature,
+                    "max_tokens": max_tokens or MODEL_CONFIG.max_tokens,
+                    "top_p": MODEL_CONFIG.top_p,
+                    "frequency_penalty": MODEL_CONFIG.frequency_penalty,
+                    "stream": True
+                }
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            yield "data: [DONE]\n\n"
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data["choices"][0]["delta"]
+                            content = delta.get("content")
+                            if content is not None:
+                                yield f"data: {json.dumps({'text': content})}\n\n"
+                        except Exception as e:
+                            logger.error(f"Error parsing SSE chunk: {e}")
+                            continue
+    except Exception as e:
+        logger.error(f"Stream from Groq failed: {e}", exc_info=True)
+        yield f"data: {json.dumps({'error': 'stream_interrupted'})}\n\n"
+        raise
