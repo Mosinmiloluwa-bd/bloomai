@@ -14,6 +14,8 @@ services:
         sync: false
       - key: MODEL_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
       - key: PRODUCTION_FRONTEND_URL
         sync: false
 
